@@ -24,7 +24,7 @@ app.add_middleware(
 CLIENT_ID = os.getenv("SPOTIPY_CLIENT_ID")
 CLIENT_SECRET = os.getenv("SPOTIPY_CLIENT_SECRET")
 REDIRECT_URI = os.getenv("SPOTIPY_REDIRECT_URI")
-FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173").rstrip("/")
 SCOPE = "playlist-read-private playlist-modify-public playlist-modify-private user-library-read"
 
 # Global Auth Manager (Stateless for Vercel)
@@ -110,29 +110,34 @@ def get_playlists(request: Request):
     if not sp:
         raise HTTPException(status_code=401, detail="Not authenticated")
     
-    saved_tracks = sp.current_user_saved_tracks(limit=1)
-    liked_songs_count = saved_tracks['total']
-    
-    # Create a pseudo-playlist object for Liked Songs
-    liked_songs_playlist = {
-        "id": "liked",
-        "name": "Liked Songs",
-        "images": [{"url": "https://misc.scdn.co/liked-songs/liked-songs-300.png"}],
-        "tracks": {"total": liked_songs_count},
-        "owner": {"display_name": "You"},
-        "description": "Your Liked Songs"
-    }
-    
-    results = sp.current_user_playlists(limit=50)
-    playlists = results['items']
-    while results['next']:
-        results = sp.next(results)
-        playlists.extend(results['items'])
+    try:
+        saved_tracks = sp.current_user_saved_tracks(limit=1)
+        liked_songs_count = saved_tracks['total']
         
-    # Prepend Liked Songs to the list
-    playlists.insert(0, liked_songs_playlist)
+        # Create a pseudo-playlist object for Liked Songs
+        liked_songs_playlist = {
+            "id": "liked",
+            "name": "Liked Songs",
+            "images": [{"url": "https://misc.scdn.co/liked-songs/liked-songs-300.png"}],
+            "tracks": {"total": liked_songs_count},
+            "owner": {"display_name": "You"},
+            "description": "Your Liked Songs"
+        }
         
-    return {"playlists": playlists}
+        results = sp.current_user_playlists(limit=50)
+        playlists = results['items']
+        while results['next']:
+            results = sp.next(results)
+            playlists.extend(results['items'])
+            
+        # Prepend Liked Songs to the list
+        playlists.insert(0, liked_songs_playlist)
+            
+        return {"playlists": playlists}
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Spotify API Error: {str(e)}")
 
 @app.get("/api/status")
 def get_status(request: Request):
