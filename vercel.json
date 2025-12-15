@@ -13,6 +13,8 @@
   ],
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/backend/main.py" },
-    { "source": "/(.*)", "destination": "/index.html" }
+    { "source": "/assets/(.*)", "destination": "/frontend/assets/$1" },
+    { "source": "/(.*)\\.(.*)", "destination": "/frontend/$1.$2" },
+    { "source": "/(.*)", "destination": "/frontend/index.html" }
   ]
 }
