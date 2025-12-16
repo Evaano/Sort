@@ -197,10 +197,10 @@ export default function Analysis() {
     : data.tracks;
 
   return (
-    <div className="h-screen bg-neutral-900 text-white p-6 max-w-7xl mx-auto flex flex-col overflow-hidden relative">
+    <div className="min-h-screen bg-neutral-900 text-white p-3 sm:p-6 max-w-7xl mx-auto flex flex-col overflow-hidden relative">
       {/* Modal Overlay */}
       {modal.isOpen && (
-        <div className="absolute inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
           <div className="bg-neutral-800 border border-white/10 rounded-2xl p-8 max-w-md w-full shadow-2xl scale-100 animate-in zoom-in-95 duration-200">
             <div className="flex justify-center mb-6">
               {modal.type === "confirm" && <Disc size={48} className="text-blue-500" />}
@@ -278,10 +278,10 @@ export default function Analysis() {
           )}
         </div>
 
-        <div className="flex flex-col lg:flex-row gap-8 mb-6">
+        <div className="flex flex-col gap-4 sm:gap-8 mb-6">
           <div className="flex-1">
-            <h1 className="text-4xl font-bold mb-2">Playlist Analysis</h1>
-            <div className="flex gap-4 text-neutral-400 mt-4">
+            <h1 className="text-2xl sm:text-4xl font-bold mb-2">Playlist Analysis</h1>
+            <div className="flex flex-wrap gap-2 sm:gap-4 text-neutral-400 mt-4 text-sm sm:text-base">
               <div className="bg-neutral-800 px-4 py-2 rounded-lg flex items-center gap-2">
                 <Music2 size={18} />
                 <span className="text-white font-bold">{data.metrics.total_tracks}</span> Tracks
@@ -297,7 +297,7 @@ export default function Analysis() {
             </div>
             {data.metrics.tracks_with_features > 0 && (
               <>
-                <div className="flex flex-wrap gap-3 text-neutral-400 mt-2">
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 text-neutral-400 mt-2 text-xs sm:text-sm">
                   <div
                     className="bg-neutral-800 px-3 py-2 rounded-lg flex items-center gap-2"
                     title="Average Energy (0-1)"
@@ -360,10 +360,10 @@ export default function Analysis() {
       </div>
 
       {/* Main Content: Genre list and Track list side-by-side */}
-      <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
         {/* Left Col: Interactive Genre List */}
-        <div className="bg-neutral-800/50 rounded-2xl p-6 border border-white/5 flex flex-col overflow-hidden">
-          <h2 className="text-2xl font-bold mb-4 flex-shrink-0">
+        <div className="bg-neutral-800/50 rounded-2xl p-4 sm:p-6 border border-white/5 flex flex-col overflow-hidden">
+          <h2 className="text-xl sm:text-2xl font-bold mb-4 flex-shrink-0">
             {selectedGenre ? `Genre: ${selectedGenre}` : "Vibe Generator"}
           </h2>
 

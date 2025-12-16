@@ -260,6 +260,12 @@ def fetch_audio_features_map(sp, track_ids):
     audio_features_map = {}
     RECCOBEATS_BASE = "https://api.reccobeats.com/v1/audio-features"
     
+    # Headers to ensure API accepts our requests (required for some serverless environments)
+    headers = {
+        "User-Agent": "SpotifySorter/1.0",
+        "Accept": "application/json",
+    }
+    
     # ReccoBeats batch limit is 40
     for i in range(0, len(track_ids), 40):
         batch = track_ids[i:i+40]
@@ -267,22 +273,33 @@ def fetch_audio_features_map(sp, track_ids):
             continue
         try:
             ids_param = ",".join(batch)
-            response = requests.get(f"{RECCOBEATS_BASE}?ids={ids_param}", timeout=10)
+            print(f"Fetching audio features for batch {i//40 + 1} ({len(batch)} tracks)...")
+            response = requests.get(
+                f"{RECCOBEATS_BASE}?ids={ids_param}", 
+                headers=headers,
+                timeout=15  # Increased timeout for serverless cold starts
+            )
             
             if response.status_code == 200:
                 data = response.json()
                 # ReccoBeats returns { "content": [...] }
                 features_list = data.get("content", [])
+                print(f"Got {len(features_list)} audio features from ReccoBeats")
                 # Match features to track IDs by position (ReccoBeats returns UUIDs, not Spotify IDs)
                 for idx, feat in enumerate(features_list):
                     if feat and idx < len(batch):
                         spotify_track_id = batch[idx]
                         audio_features_map[spotify_track_id] = feat
             else:
-                print(f"ReccoBeats API returned {response.status_code}: {response.text[:100]}")
+                print(f"ReccoBeats API error {response.status_code}: {response.text[:200]}")
+        except requests.exceptions.Timeout:
+            print(f"ReccoBeats API timeout for batch {i//40 + 1}")
+        except requests.exceptions.RequestException as e:
+            print(f"ReccoBeats API request error: {type(e).__name__}: {e}")
         except Exception as e:
-            print(f"Error fetching audio features from ReccoBeats: {e}")
+            print(f"Error fetching audio features from ReccoBeats: {type(e).__name__}: {e}")
     
+    print(f"Total audio features fetched: {len(audio_features_map)}")
     return audio_features_map
 
 

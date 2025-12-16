@@ -78,7 +78,7 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="p-8 max-w-7xl mx-auto pb-24 relative">
+    <div className="p-4 sm:p-8 max-w-7xl mx-auto pb-24 relative">
       {/* Delete Confirmation Modal */}
       {deleteModal.isOpen && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
@@ -125,19 +125,21 @@ export default function Dashboard() {
         </div>
       )}
 
-      <header className="mb-12 flex items-center justify-between sticky top-0 bg-neutral-900/95 backdrop-blur z-20 py-4 border-b border-white/5">
+      <header className="mb-8 sm:mb-12 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 sticky top-0 bg-neutral-900/95 backdrop-blur z-20 py-4 border-b border-white/5">
         <div>
-          <h1 className="text-3xl font-bold text-white mb-2 ml-1">My Playlists</h1>
-          <p className="text-neutral-400 ml-1">Select playlists to analyze and sort</p>
+          <h1 className="text-2xl sm:text-3xl font-bold text-white mb-1 sm:mb-2 ml-1">
+            My Playlists
+          </h1>
+          <p className="text-neutral-400 ml-1 text-sm sm:text-base">Select playlists to analyze</p>
         </div>
 
         {selectedPlaylists.size > 0 && (
           <button
             onClick={handleAnalyze}
-            className="bg-green-500 hover:bg-green-400 text-black font-bold py-3 px-8 rounded-full shadow-lg hover:shadow-green-500/40 transition-all flex items-center gap-2 animate-in fade-in slide-in-from-right-10"
+            className="bg-green-500 hover:bg-green-400 text-black font-bold py-2.5 sm:py-3 px-6 sm:px-8 rounded-full shadow-lg hover:shadow-green-500/40 transition-all flex items-center gap-2 text-sm sm:text-base"
           >
-            <PlayCircle size={20} className="fill-current" />
-            Analyze {selectedPlaylists.size} Playlists
+            <PlayCircle size={18} className="fill-current" />
+            Analyze {selectedPlaylists.size}
           </button>
         )}
       </header>
@@ -147,7 +149,7 @@ export default function Dashboard() {
           <Loader2 className="animate-spin text-green-500" size={48} />
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
           {playlists.map((playlist) => {
             const isSelected = selectedPlaylists.has(playlist.id);
             const isLikedSongs = playlist.id === "liked";
