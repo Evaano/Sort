@@ -47,12 +47,16 @@ export default function Analysis() {
         setLoading(false);
       } catch (error) {
         console.error("Error analyzing playlist:", error);
+        if (error.response?.status === 401) {
+          navigate("/");
+          return;
+        }
         setLoading(false);
       }
     };
 
     fetchAnalysis();
-  }, [id]);
+  }, [id, navigate]);
 
   const getGenreColor = (index) => {
     const colors = [

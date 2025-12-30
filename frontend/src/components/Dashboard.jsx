@@ -23,12 +23,16 @@ export default function Dashboard() {
         setLoading(false);
       } catch (error) {
         console.error("Error fetching playlists:", error);
+        if (error.response?.status === 401) {
+          navigate("/");
+          return;
+        }
         setLoading(false);
       }
     };
 
     fetchPlaylists();
-  }, []);
+  }, [navigate]);
 
   const toggleSelection = (id) => {
     const newSelection = new Set(selectedPlaylists);

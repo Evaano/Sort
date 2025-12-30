@@ -105,8 +105,8 @@ def callback(code: str):
         httponly=True, 
         max_age=3600*24*7, # 1 week
         path="/",
-        samesite="None",
-        secure=True 
+        samesite="lax" if not is_production else "none",
+        secure=is_production  # Only require secure in production (HTTPS)
     )
     return response
 
