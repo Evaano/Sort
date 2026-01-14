@@ -19,6 +19,8 @@ import {
   Timer,
   Guitar,
   Mic,
+  Volume2,
+  Music,
 } from "lucide-react";
 import api from "../config";
 
@@ -28,6 +30,7 @@ export default function Analysis() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [selectedGenre, setSelectedGenre] = useState(null);
+  const [selectedTrack, setSelectedTrack] = useState(null);
   const [showGuide, setShowGuide] = useState(true);
 
   // Modal State for confirmations and feedback
@@ -249,7 +252,7 @@ export default function Analysis() {
       )}
 
       {/* Header Section */}
-      <div className="flex-shrink-0">
+      <div className="shrink-0">
         <div className="flex justify-between items-start mb-6">
           <button
             onClick={() => navigate("/dashboard")}
@@ -260,7 +263,7 @@ export default function Analysis() {
 
           {showGuide && (
             <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-3 text-sm text-blue-200 flex items-start gap-3 max-w-md animate-in slide-in-from-top-4">
-              <Info size={20} className="flex-shrink-0 mt-0.5 text-blue-400" />
+              <Info size={20} className="shrink-0 mt-0.5 text-blue-400" />
               <div>
                 <p className="font-semibold mb-1">How it works:</p>
                 <p>
@@ -299,23 +302,52 @@ export default function Analysis() {
                 <span className="text-white font-bold">{data.metrics.total_genres}</span> Genres
               </div>
             </div>
-            {data.metrics.tracks_with_features > 0 && (
+            {(data.metrics.tracks_with_features > 0 || selectedTrack) && (
               <>
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 text-neutral-400 mt-2 text-xs sm:text-sm">
+                {/* Stats Header - shows what we're viewing */}
+                <div className="flex items-center justify-between mt-4 mb-2">
+                  <h3 className="text-sm font-medium text-neutral-300">
+                    {selectedTrack ? (
+                      <span className="flex items-center gap-2">
+                        <span className="text-green-400">♪</span>
+                        {selectedTrack.name}
+                        <span className="text-neutral-500">
+                          by {selectedTrack.artists.join(", ")}
+                        </span>
+                      </span>
+                    ) : (
+                      "Playlist Averages"
+                    )}
+                  </h3>
+                  {selectedTrack && (
+                    <button
+                      onClick={() => setSelectedTrack(null)}
+                      className="text-xs text-neutral-400 hover:text-white px-2 py-1 rounded bg-white/5 hover:bg-white/10"
+                    >
+                      ← Back to averages
+                    </button>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2 text-neutral-400 text-xs sm:text-sm">
                   <div
                     className="bg-neutral-800 px-3 py-2 rounded-lg flex items-center gap-2"
                     title="Average Energy (0-1)"
                   >
                     <Zap size={16} className="text-yellow-400" />
-                    <span className="text-white font-bold">{data.metrics.avg_energy}</span>
+                    <span className="text-white font-bold">
+                      {selectedTrack?.audio_features?.energy?.toFixed(2) ?? data.metrics.avg_energy}
+                    </span>
                     Energy
                   </div>
                   <div
                     className="bg-neutral-800 px-3 py-2 rounded-lg flex items-center gap-2"
-                    title="Average Valence/Mood (0-1)"
+                    title="Valence/Mood (0-1)"
                   >
                     <Smile size={16} className="text-blue-400" />
-                    <span className="text-white font-bold">{data.metrics.avg_valence}</span>
+                    <span className="text-white font-bold">
+                      {selectedTrack?.audio_features?.valence?.toFixed(2) ??
+                        data.metrics.avg_valence}
+                    </span>
                     Mood
                   </div>
                   <div
@@ -323,15 +355,20 @@ export default function Analysis() {
                     title="Average Danceability (0-1)"
                   >
                     <Activity size={16} className="text-pink-400" />
-                    <span className="text-white font-bold">{data.metrics.avg_danceability}</span>
+                    <span className="text-white font-bold">
+                      {selectedTrack?.audio_features?.danceability?.toFixed(2) ??
+                        data.metrics.avg_danceability}
+                    </span>
                     Dance
                   </div>
                   <div
                     className="bg-neutral-800 px-3 py-2 rounded-lg flex items-center gap-2"
-                    title="Average Tempo (BPM)"
+                    title="Tempo (BPM)"
                   >
                     <Timer size={16} className="text-orange-400" />
-                    <span className="text-white font-bold">{data.metrics.avg_tempo}</span>
+                    <span className="text-white font-bold">
+                      {selectedTrack?.audio_features?.tempo?.toFixed(0) ?? data.metrics.avg_tempo}
+                    </span>
                     BPM
                   </div>
                   <div
@@ -339,18 +376,49 @@ export default function Analysis() {
                     title="Average Acousticness (0-1)"
                   >
                     <Guitar size={16} className="text-amber-400" />
-                    <span className="text-white font-bold">{data.metrics.avg_acousticness}</span>
+                    <span className="text-white font-bold">
+                      {selectedTrack?.audio_features?.acousticness?.toFixed(2) ??
+                        data.metrics.avg_acousticness}
+                    </span>
                     Acoustic
                   </div>
                   <div
                     className="bg-neutral-800 px-3 py-2 rounded-lg flex items-center gap-2"
-                    title="Average Instrumentalness (0-1) - Higher = less vocals"
+                    title="Instrumentalness (0-1)"
                   >
                     <Mic size={16} className="text-purple-400" />
                     <span className="text-white font-bold">
-                      {data.metrics.avg_instrumentalness}
+                      {selectedTrack?.audio_features?.instrumentalness?.toFixed(2) ??
+                        data.metrics.avg_instrumentalness}
                     </span>
                     Instrumental
+                  </div>
+                  <div
+                    className="bg-neutral-800 px-3 py-2 rounded-lg flex items-center gap-2"
+                    title={selectedTrack ? "Track key mode" : "Percentage of tracks in minor key"}
+                  >
+                    <Music size={16} className="text-indigo-400" />
+                    <span className="text-white font-bold">
+                      {selectedTrack
+                        ? selectedTrack.audio_features?.mode === 0
+                          ? "Minor"
+                          : "Major"
+                        : `${data.metrics.pct_minor_key ?? 0}%`}
+                    </span>
+                    {selectedTrack ? "Key" : "Minor Key"}
+                  </div>
+                  <div
+                    className="bg-neutral-800 px-3 py-2 rounded-lg flex items-center gap-2"
+                    title="Loudness (dB) - Closer to 0 = Louder"
+                  >
+                    <Volume2 size={16} className="text-red-400" />
+                    <span className="text-white font-bold">
+                      {selectedTrack?.audio_features?.loudness?.toFixed(1) ??
+                        data.metrics.avg_loudness ??
+                        -10}
+                      dB
+                    </span>
+                    Loud
                   </div>
                 </div>
                 <p className="text-xs text-neutral-500 mt-1">
@@ -367,7 +435,7 @@ export default function Analysis() {
       <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
         {/* Left Col: Interactive Genre List */}
         <div className="bg-neutral-800/50 rounded-2xl p-4 sm:p-6 border border-white/5 flex flex-col overflow-hidden">
-          <h2 className="text-xl sm:text-2xl font-bold mb-4 flex-shrink-0">
+          <h2 className="text-xl sm:text-2xl font-bold mb-4 shrink-0">
             {selectedGenre ? `Genre: ${selectedGenre}` : "Vibe Generator"}
           </h2>
 
@@ -482,7 +550,7 @@ export default function Analysis() {
 
         {/* Right Col: Track List (Dynamic) */}
         <div className="lg:col-span-2 bg-neutral-800/50 rounded-2xl p-6 border border-white/5 flex flex-col overflow-hidden">
-          <h2 className="text-2xl font-bold mb-4 flex-shrink-0">
+          <h2 className="text-2xl font-bold mb-4 shrink-0">
             Tracks{" "}
             {selectedGenre && (
               <span className="text-neutral-400 text-lg font-normal">({visibleTracks.length})</span>
@@ -492,9 +560,14 @@ export default function Analysis() {
             {visibleTracks.map((track) => (
               <div
                 key={track.id}
-                className="flex items-center gap-4 p-3 hover:bg-white/5 rounded-lg transition-colors group"
+                onClick={() => setSelectedTrack(selectedTrack?.id === track.id ? null : track)}
+                className={`flex items-center gap-4 p-3 rounded-lg transition-all cursor-pointer group ${
+                  selectedTrack?.id === track.id
+                    ? "bg-green-500/10 border border-green-500/30"
+                    : "hover:bg-white/5"
+                }`}
               >
-                <div className="w-12 h-12 bg-neutral-700 rounded overflow-hidden flex-shrink-0">
+                <div className="w-12 h-12 bg-neutral-700 rounded overflow-hidden shrink-0">
                   {track.image && (
                     <img
                       src={track.image}
@@ -504,7 +577,11 @@ export default function Analysis() {
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="font-medium truncate">{track.name}</div>
+                  <div
+                    className={`font-medium truncate ${selectedTrack?.id === track.id ? "text-green-400" : ""}`}
+                  >
+                    {track.name}
+                  </div>
                   <div className="text-sm text-neutral-400 truncate">
                     {track.artists.join(", ")}
                   </div>

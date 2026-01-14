@@ -182,36 +182,195 @@ def delete_playlist(playlist_id: str, request: Request):
         print(f"Error deleting playlist: {e}")
         raise HTTPException(status_code=500, detail=f"Error deleting playlist: {str(e)}")
 
+"""
+VIBE CLASSIFICATION SYSTEM - Based on Russell Circumplex Model
+
+Research-based thresholds for mood classification using Spotify audio features:
+- Valence (0-1): Musical positiveness. High = happy, Low = sad
+- Energy (0-1): Intensity/activity. High = fast/loud, Low = calm
+- Danceability (0-1): How suitable for dancing
+- Tempo (BPM): Speed of track. Sad songs often <100 BPM
+- Mode (0/1): 0=Minor (sadder), 1=Major (happier) - CRITICAL for mood!
+- Loudness (dB): Typically -60 to 0. Intense = louder (closer to 0)
+- Acousticness (0-1): Higher = more acoustic = often more chill/intimate
+
+Classification uses weighted scoring instead of strict thresholds.
+Each vibe has "required" (must match) and "weighted" (contribute to score) criteria.
+"""
+
+# Minimum score needed to classify (out of 100)
+VIBE_SCORE_THRESHOLD = 50
+
 VIBE_DEFINITIONS = {
-    # DEPRESSY/SAD: Low valence is the KEY indicator (research confirms < 0.3-0.4)
-    # Energy can vary, but typically lower for truly melancholic tracks
+    # DEPRESSY/SAD: Low valence, calm energy, often minor key
+    # Russell model: Low valence + Low arousal quadrant
     "depressy": {
-        "valence_max": 0.35,       # PRIMARY: Sad, melancholic mood (< 0.3-0.4 per research)
-        "energy_max": 0.5,         # Generally calmer (can vary for "sad-energy" songs)
-        "danceability_max": 0.55,  # Less danceable
+        "required": {
+            "valence_max": 0.45,    # Must be sad-ish (under 45%)
+            "energy_max": 0.65,     # Must not be too energetic
+        },
+        "weighted": {
+            # Primary indicators (higher weight)
+            "valence": {"ideal": 0.25, "weight": 35},   # Lower is sadder
+            "energy": {"ideal": 0.35, "weight": 20},    # Lower is calmer/sadder
+            # Secondary indicators
+            "mode": {"ideal": 0, "weight": 15},         # Minor key = sadder
+            "tempo": {"ideal": 85, "max": 110, "weight": 10},  # Slower = sadder
+            "acousticness": {"ideal": 0.5, "weight": 10},      # Acoustic can feel intimate/sad
+            "danceability": {"ideal": 0.35, "weight": 10},     # Less danceable = sadder
+        }
     },
-    # CHILL: Relaxed, not overly happy or sad, low energy
-    # Research: valence 0.4-0.7, energy < 0.6, danceability < 0.6
+    
+    # CHILL: Relaxed, moderate mood, low energy
+    # Russell model: Moderate valence + Low arousal
     "chill": {
-        "energy_max": 0.5,         # Low intensity, relaxed
-        "valence_min": 0.3,        # Not too sad
-        "valence_max": 0.7,        # Not overly euphoric
-        "danceability_max": 0.6,   # Not high-energy dance tracks
+        "required": {
+            "energy_max": 0.60,     # Must be relaxed
+            "valence_min": 0.30,    # Not depressing
+        },
+        "weighted": {
+            "energy": {"ideal": 0.40, "weight": 30},           # Low-moderate energy
+            "valence": {"ideal": 0.55, "min": 0.30, "max": 0.75, "weight": 25},  # Pleasant but not hyper
+            "danceability": {"ideal": 0.50, "max": 0.70, "weight": 15},
+            "tempo": {"ideal": 100, "max": 120, "weight": 15},  # Moderate tempo
+            "acousticness": {"ideal": 0.60, "weight": 15},      # Acoustic vibes are chill
+        }
     },
-    # PARTY: High energy, high danceability, positive/euphoric mood
-    # Research: valence > 0.7, energy > 0.7, danceability > 0.6-0.7
+    
+    # PARTY: High energy, high danceability, positive mood
+    # Russell model: High valence + High arousal quadrant
     "party": {
-        "energy_min": 0.7,         # High intensity
-        "danceability_min": 0.6,   # Suitable for dancing
-        "valence_min": 0.6,        # Cheerful, euphoric
+        "required": {
+            "energy_min": 0.60,         # Must be energetic
+            "danceability_min": 0.55,   # Must be danceable
+        },
+        "weighted": {
+            "energy": {"ideal": 0.80, "weight": 30},            # High intensity
+            "danceability": {"ideal": 0.75, "weight": 30},      # Very danceable
+            "valence": {"ideal": 0.75, "weight": 25},           # Happy/euphoric
+            "tempo": {"ideal": 120, "min": 100, "weight": 10},  # Upbeat
+            "loudness": {"ideal": -6, "min": -12, "weight": 5}, # Loud enough for party
+        }
     },
-    # INTENSE: Very high energy, darker mood (metal, aggressive EDM, workout)
-    # High energy + low valence = aggressive/intense
+    
+    # INTENSE: High energy but darker mood (metal, aggressive EDM, workout)
+    # Russell model: Low valence + High arousal quadrant
     "intense": {
-        "energy_min": 0.75,        # Very high intensity
-        "valence_max": 0.5,        # Darker, not cheerful
+        "required": {
+            "energy_min": 0.65,     # Must be high energy
+            "valence_max": 0.55,    # Must be darker mood
+        },
+        "weighted": {
+            "energy": {"ideal": 0.85, "weight": 35},            # Very high intensity
+            "valence": {"ideal": 0.35, "weight": 25},           # Dark/aggressive mood
+            "loudness": {"ideal": -5, "min": -12, "weight": 15}, # Loud!
+            "tempo": {"ideal": 130, "min": 100, "weight": 15},  # Fast-paced
+            "mode": {"ideal": 0, "weight": 10},                 # Minor key = more intense
+        }
     }
 }
+
+
+def calculate_vibe_score(features: dict, vibe: str) -> tuple[bool, int, dict]:
+    """
+    Calculate how well a track matches a vibe using weighted scoring.
+    
+    Returns:
+        (passes_required, score, debug_info)
+        - passes_required: True if all required criteria are met
+        - score: 0-100 score for weighted criteria match
+        - debug_info: Dictionary with scoring breakdown for debugging
+    """
+    criteria = VIBE_DEFINITIONS.get(vibe)
+    if not criteria:
+        return False, 0, {"error": f"Unknown vibe: {vibe}"}
+    
+    debug_info = {"vibe": vibe, "features": features, "criteria_checks": {}}
+    
+    # 1. Check required criteria (hard pass/fail)
+    required = criteria.get("required", {})
+    for key, limit in required.items():
+        parts = key.split('_')
+        metric = parts[0]  # energy, valence, etc.
+        op = parts[1]      # min or max
+        
+        val = features.get(metric)
+        if val is None:
+            debug_info["criteria_checks"][key] = {"value": None, "limit": limit, "passed": False}
+            return False, 0, debug_info
+        
+        passed = True
+        if op == 'min' and val < limit:
+            passed = False
+        elif op == 'max' and val > limit:
+            passed = False
+        
+        debug_info["criteria_checks"][key] = {"value": val, "limit": limit, "passed": passed}
+        
+        if not passed:
+            debug_info["failed_required"] = key
+            return False, 0, debug_info
+    
+    # 2. Calculate weighted score for secondary criteria
+    weighted = criteria.get("weighted", {})
+    total_score = 0
+    total_weight = sum(w.get("weight", 0) for w in weighted.values())
+    
+    for metric, config in weighted.items():
+        val = features.get(metric)
+        weight = config.get("weight", 10)
+        ideal = config.get("ideal")
+        
+        if val is None or ideal is None:
+            continue
+        
+        # Calculate how close to ideal (0-1 scale)
+        # For bounded metrics, we check if value is in ideal range
+        metric_max = config.get("max")
+        metric_min = config.get("min")
+        
+        if metric == "mode":
+            # Mode is binary: 0 or 1
+            closeness = 1.0 if val == ideal else 0.3
+        elif metric == "loudness":
+            # Loudness: -60 to 0, closer to 0 is louder
+            # Ideal is typically around -5 to -8 for loud tracks
+            distance = abs(val - ideal)
+            closeness = max(0, 1 - (distance / 15))  # 15 dB range
+        elif metric == "tempo":
+            # Tempo: typically 60-180 BPM
+            distance = abs(val - ideal)
+            closeness = max(0, 1 - (distance / 60))  # 60 BPM tolerance
+            # Penalize if outside hard limits
+            if metric_max and val > metric_max:
+                closeness *= 0.5
+            if metric_min and val < metric_min:
+                closeness *= 0.5
+        else:
+            # Standard 0-1 metrics (valence, energy, danceability, acousticness)
+            distance = abs(val - ideal)
+            closeness = max(0, 1 - distance)  # Simple linear falloff
+            # Penalize if outside soft limits
+            if metric_max and val > metric_max:
+                closeness *= 0.7
+            if metric_min and val < metric_min:
+                closeness *= 0.7
+        
+        metric_score = closeness * (weight / total_weight) * 100
+        total_score += metric_score
+        
+        debug_info["criteria_checks"][f"weighted_{metric}"] = {
+            "value": val,
+            "ideal": ideal,
+            "closeness": round(closeness, 2),
+            "contribution": round(metric_score, 1)
+        }
+    
+    debug_info["total_score"] = round(total_score, 1)
+    debug_info["passes_threshold"] = total_score >= VIBE_SCORE_THRESHOLD
+    
+    return True, round(total_score, 1), debug_info
+
 
 def fetch_unique_tracks(sp, playlist_ids_list):
     all_tracks = []
@@ -387,6 +546,8 @@ def analyze_playlists(playlist_ids: str, request: Request):
     total_tempo = 0
     total_acousticness = 0
     total_instrumentalness = 0
+    total_mode = 0
+    total_loudness = 0
     count_with_features = 0
 
     for track in track_data:
@@ -399,7 +560,9 @@ def analyze_playlists(playlist_ids: str, request: Request):
                 'danceability': feat.get('danceability', 0),
                 'tempo': feat.get('tempo', 0),
                 'instrumentalness': feat.get('instrumentalness', 0),
-                'acousticness': feat.get('acousticness', 0)
+                'acousticness': feat.get('acousticness', 0),
+                'mode': feat.get('mode', 1),        # 0=Minor, 1=Major
+                'loudness': feat.get('loudness', -10)  # dB, typically -60 to 0
             }
             total_energy += feat.get('energy', 0)
             total_valence += feat.get('valence', 0)
@@ -407,6 +570,8 @@ def analyze_playlists(playlist_ids: str, request: Request):
             total_tempo += feat.get('tempo', 0)
             total_acousticness += feat.get('acousticness', 0)
             total_instrumentalness += feat.get('instrumentalness', 0)
+            total_mode += feat.get('mode', 1)  # 0=Minor, 1=Major
+            total_loudness += feat.get('loudness', -10)
             count_with_features += 1
         else:
             track['audio_features'] = None
@@ -429,7 +594,10 @@ def analyze_playlists(playlist_ids: str, request: Request):
             "avg_danceability": round(avg_danceability, 2),
             "avg_tempo": round(avg_tempo, 1),
             "avg_acousticness": round(avg_acousticness, 2),
-            "avg_instrumentalness": round(avg_instrumentalness, 2)
+            "avg_instrumentalness": round(avg_instrumentalness, 2),
+            "avg_mode": round(total_mode / count_with_features, 2) if count_with_features > 0 else 1,
+            "avg_loudness": round(total_loudness / count_with_features, 1) if count_with_features > 0 else -10,
+            "pct_minor_key": round((1 - (total_mode / count_with_features)) * 100) if count_with_features > 0 else 0
         },
         "genre_counts": sorted_genres,
         "tracks": track_data
@@ -519,12 +687,16 @@ def create_vibe_playlist(data: CreateVibePlaylistRequest, request: Request):
     # 3. Fetch Audio Features
     features_map = fetch_audio_features_map(sp, track_ids)
     
-    # 4. Filter Logic
-    vibe_criteria = VIBE_DEFINITIONS.get(data.vibe)
-    if not vibe_criteria:
+    # 4. Filter using weighted scoring system
+    if data.vibe not in VIBE_DEFINITIONS:
         raise HTTPException(status_code=400, detail=f"Unknown vibe: {data.vibe}")
         
     filtered_uris = []
+    matched_tracks = []  # For debug logging
+    rejected_tracks = []  # For debug logging
+    
+    print(f"\n=== VIBE CLASSIFICATION: {data.vibe.upper()} ===")
+    print(f"Analyzing {len(all_tracks)} tracks...\n")
     
     for t in all_tracks:
         track = t.get('track')
@@ -534,28 +706,36 @@ def create_vibe_playlist(data: CreateVibePlaylistRequest, request: Request):
             continue
             
         feat = features_map[tid]
-        match = True
         
-        # Check all criteria (e.g. min_energy, max_valence)
-        for key, limit in vibe_criteria.items():
-            # key is like 'energy_min', 'valence_max'
-            metric = key.split('_')[0] # energy, valence, danceability
-            op = key.split('_')[1]     # min/max
-            
-            val = feat.get(metric)
-            if val is None:
-                match = False
-                break
-                
-            if op == 'min' and val < limit:
-                match = False
-                break
-            if op == 'max' and val > limit:
-                match = False
-                break
+        # Build features dict for scoring
+        features_for_scoring = {
+            'energy': feat.get('energy'),
+            'valence': feat.get('valence'),
+            'danceability': feat.get('danceability'),
+            'tempo': feat.get('tempo'),
+            'acousticness': feat.get('acousticness'),
+            'instrumentalness': feat.get('instrumentalness'),
+            'mode': feat.get('mode', 1),  # Default to major if not available
+            'loudness': feat.get('loudness', -10),
+        }
         
-        if match:
+        # Use new scoring system
+        passes_required, score, debug_info = calculate_vibe_score(features_for_scoring, data.vibe)
+        
+        track_name = track.get('name', 'Unknown')
+        
+        if passes_required and score >= VIBE_SCORE_THRESHOLD:
             filtered_uris.append(track['uri'])
+            matched_tracks.append({"name": track_name, "score": score})
+            print(f"✓ MATCH: '{track_name}' - Score: {score}/100")
+        else:
+            reason = debug_info.get('failed_required', f'Score {score} < {VIBE_SCORE_THRESHOLD}')
+            rejected_tracks.append({"name": track_name, "reason": reason})
+            # Only log first few rejections to avoid spam
+            if len(rejected_tracks) <= 5:
+                print(f"✗ REJECT: '{track_name}' - Reason: {reason}")
+    
+    print(f"\n=== RESULTS: {len(filtered_uris)} matched, {len(rejected_tracks)} rejected ===")
 
     if not filtered_uris:
         return {

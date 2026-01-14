@@ -191,7 +191,7 @@ export default function Dashboard() {
                   {isSelected && <div className="w-2.5 h-2.5 bg-black rounded-full" />}
                 </div>
 
-                <div className="relative w-20 h-20 flex-shrink-0 bg-neutral-700 rounded-lg overflow-hidden shadow-lg">
+                <div className="relative w-20 h-20 shrink-0 bg-neutral-700 rounded-lg overflow-hidden shadow-lg">
                   {playlist.images && playlist.images[0] ? (
                     <img
                       src={playlist.images[0].url}

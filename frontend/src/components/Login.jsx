@@ -25,7 +25,7 @@ export default function Login() {
   };
 
   return (
-    <div className="flex flex-col items-center justify-center h-screen bg-gradient-to-br from-neutral-900 to-black p-4">
+    <div className="flex flex-col items-center justify-center h-screen bg-linear-to-br from-neutral-900 to-black p-4">
       <div className="bg-neutral-800/50 p-8 rounded-2xl shadow-2xl border border-white/10 backdrop-blur-md max-w-md w-full text-center">
         <div className="flex justify-center mb-6">
           <div className="p-4 bg-green-500 rounded-full shadow-lg shadow-green-500/20">
@@ -33,7 +33,7 @@ export default function Login() {
           </div>
         </div>
 
-        <h1 className="text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-neutral-400 mb-2">
+        <h1 className="text-4xl font-bold bg-clip-text text-transparent bg-linear-to-r from-white to-neutral-400 mb-2">
           Spotify Sorter
         </h1>
         <p className="text-neutral-400 mb-8 text-lg">
