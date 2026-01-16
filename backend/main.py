@@ -768,3 +768,77 @@ def create_vibe_playlist(data: CreateVibePlaylistRequest, request: Request):
     except Exception as e:
         print(f"Error creating playlist: {e}")
         raise HTTPException(status_code=500, detail=f"Error creating playlist: {str(e)}")
+
+@app.post("/api/preview_vibe_playlist")
+def preview_vibe_playlist(data: CreateVibePlaylistRequest, request: Request):
+    """
+    Preview tracks that would be added to a vibe playlist without creating it.
+    Returns the list of filtered tracks.
+    """
+    sp = get_spotify_client(request=request)
+    if not sp:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    # 1. Fetch Tracks
+    playlist_ids = data.source_playlist_ids.split(',')
+    all_tracks = fetch_unique_tracks(sp, playlist_ids)
+    
+    # 2. Extract IDs for audio features
+    track_ids = [t['track']['id'] for t in all_tracks if t.get('track') and t['track'].get('id')]
+    
+    # 3. Fetch Audio Features
+    features_map = fetch_audio_features_map(sp, track_ids)
+    
+    # 4. Filter using weighted scoring system
+    if data.vibe not in VIBE_DEFINITIONS:
+        raise HTTPException(status_code=400, detail=f"Unknown vibe: {data.vibe}")
+        
+    filtered_tracks = []
+    
+    print(f"\n=== PREVIEW VIBE: {data.vibe.upper()} ===")
+    
+    for t in all_tracks:
+        track = t.get('track')
+        if not track: continue
+        tid = track.get('id')
+        if not tid or tid not in features_map:
+            continue
+            
+        feat = features_map[tid]
+        
+        # Build features dict for scoring
+        features_for_scoring = {
+            'energy': feat.get('energy'),
+            'valence': feat.get('valence'),
+            'danceability': feat.get('danceability'),
+            'tempo': feat.get('tempo'),
+            'acousticness': feat.get('acousticness'),
+            'instrumentalness': feat.get('instrumentalness'),
+            'mode': feat.get('mode', 1),  # Default to major if not available
+            'loudness': feat.get('loudness', -10),
+        }
+        
+        # Use new scoring system
+        passes_required, score, debug_info = calculate_vibe_score(features_for_scoring, data.vibe)
+        
+        if passes_required and score >= VIBE_SCORE_THRESHOLD:
+            # Add simple track info for frontend
+            track_info = {
+                "id": track['id'],
+                "uri": track['uri'],
+                "name": track['name'],
+                "artists": [a['name'] for a in track['artists']],
+                "image": track['album']['images'][0]['url'] if track['album']['images'] else None,
+                "score": score
+            }
+            filtered_tracks.append(track_info)
+    
+    # Sort by score descending
+    filtered_tracks.sort(key=lambda x: x['score'], reverse=True)
+            
+    return {
+        "status": "success",
+        "tracks": filtered_tracks,
+        "count": len(filtered_tracks),
+        "vibe": data.vibe
+    }

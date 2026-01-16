@@ -21,6 +21,10 @@ import {
   Mic,
   Volume2,
   Music,
+  Edit3,
+  Plus,
+  Search,
+  Trash2,
 } from "lucide-react";
 import api from "../config";
 
@@ -41,6 +45,17 @@ export default function Analysis() {
     message: "",
     onConfirm: null,
   });
+
+  // Preview Modal State
+  const [previewModal, setPreviewModal] = useState({
+    isOpen: false,
+    name: "",
+    tracks: [], // Tracks in the playlist
+    sourceTracks: [], // All available tracks for adding
+    isLoading: false,
+  });
+  const [activeTab, setActiveTab] = useState("included"); // 'included' | 'add'
+  const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
     const fetchAnalysis = async () => {
@@ -78,92 +93,76 @@ export default function Analysis() {
   };
 
   const handleCreatePlaylist = (genre) => {
-    const tracksToAdd = data.tracks.filter((t) => t.genres.includes(genre)).map((t) => t.uri);
-
-    if (tracksToAdd.length === 0) return;
-
     const genreName = genre.charAt(0).toUpperCase() + genre.slice(1);
+    const tracksToAdd = data.tracks.filter((t) => t.genres.includes(genre));
 
-    setModal({
+    // Open Preview Modal directly
+    setPreviewModal({
       isOpen: true,
-      type: "confirm",
-      title: `Create ${genreName} Mix?`,
-      message: `This will create a new playlist with ${tracksToAdd.length} tracks. Duplicate checks will be performed automatically.`,
-      onConfirm: () => performCreate(genreName, tracksToAdd),
+      name: `${genreName} Mix`,
+      tracks: tracksToAdd,
+      sourceTracks: data.tracks, // Allow adding any track from analysis
+      isLoading: false,
     });
   };
 
-  const handleCreateVibePlaylist = (vibe) => {
-    const vibeTitles = {
-      depressy: "Depressy / Sad",
-      chill: "Chill / Relaxed",
-      party: "Party / Hype",
-      intense: "Intense / High Energy",
-    };
-
-    setModal({
-      isOpen: true,
-      type: "confirm",
-      title: `Generate ${vibeTitles[vibe] || vibe} Playlist?`,
-      message: `We will analyze your selected playlists and extract tracks matching this vibe.`,
-      onConfirm: () => performVibeCreate(vibe),
-    });
-  };
-
-  const performVibeCreate = async (vibe) => {
+  const handleCreateVibePlaylist = async (vibe) => {
     try {
       setModal({
         isOpen: true,
         type: "loading",
         title: "Analyzing Vibes...",
-        message: "Scanning audio features and compiling your mix...",
+        message: "Scanning audio features to build your updated preview...",
         onConfirm: null,
       });
 
-      // We need to pass the source playlist IDs.
-      // In this component, 'id' param contains comma-separated IDs.
-      const response = await api.post("/api/create_vibe_playlist", {
-        name: `${vibe.charAt(0).toUpperCase() + vibe.slice(1)} Mix`,
+      const response = await api.post("/api/preview_vibe_playlist", {
+        name: "Preview", // Not used for preview
         source_playlist_ids: id,
         vibe: vibe,
       });
 
-      setModal({
+      setModal({ isOpen: false, type: "confirm", title: "", message: "", onConfirm: null });
+
+      // Open Preview with fetched tracks
+      setPreviewModal({
         isOpen: true,
-        type: "success",
-        title: "Vibe playlist Created!",
-        message: response.data.message,
-        onConfirm: null,
+        name: `${vibe.charAt(0).toUpperCase() + vibe.slice(1)} Mix`,
+        tracks: response.data.tracks,
+        sourceTracks: data.tracks,
+        isLoading: false,
       });
     } catch (error) {
-      console.error("Failed to create vibe playlist", error);
+      console.error("Failed to preview vibe playlist", error);
       setModal({
         isOpen: true,
         type: "error",
-        title: "Generation Failed",
-        message: error.response?.data?.detail || "Could not generate playlist for this vibe.",
+        title: "Preview Failed",
+        message: error.response?.data?.detail || "Could not generate preview.",
         onConfirm: null,
       });
     }
   };
 
-  const performCreate = async (genre, tracksToAdd) => {
+  const performCreateFromPreview = async () => {
+    if (previewModal.tracks.length === 0) return;
+
     try {
-      // Show Loading Modal
+      setPreviewModal((prev) => ({ ...prev, isOpen: false }));
+
       setModal({
         isOpen: true,
         type: "loading",
         title: "Creating Playlist",
-        message: "Talking to Spotify...",
+        message: "Finalizing your mix on Spotify...",
         onConfirm: null,
       });
 
       const response = await api.post("/api/create_playlist", {
-        name: `${genre} Mix`,
-        track_uris: tracksToAdd,
+        name: previewModal.name,
+        track_uris: previewModal.tracks.map((t) => t.uri),
       });
 
-      // Show Success Modal
       setModal({
         isOpen: true,
         type: "success",
@@ -173,15 +172,30 @@ export default function Analysis() {
       });
     } catch (error) {
       console.error("Failed to create playlist", error);
-      // Show Error Modal
       setModal({
         isOpen: true,
         type: "error",
         title: "Creation Failed",
-        message: "Something went wrong while creating the playlist. Please try again.",
+        message: "Something went wrong. Please try again.",
         onConfirm: null,
       });
     }
+  };
+
+  const addTrackToPreview = (track) => {
+    if (!previewModal.tracks.find((t) => t.id === track.id)) {
+      setPreviewModal((prev) => ({
+        ...prev,
+        tracks: [track, ...prev.tracks],
+      }));
+    }
+  };
+
+  const removeTrackFromPreview = (trackId) => {
+    setPreviewModal((prev) => ({
+      ...prev,
+      tracks: prev.tracks.filter((t) => t.id !== trackId),
+    }));
   };
 
   if (loading) {
@@ -246,6 +260,205 @@ export default function Analysis() {
                   Got it
                 </button>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Playlist Preview Modal */}
+      {previewModal.isOpen && (
+        <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-neutral-800 border border-white/10 rounded-2xl w-full max-w-6xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+            {/* Header */}
+            <div className="p-4 sm:p-6 border-b border-white/10 flex items-center justify-between shrink-0 bg-neutral-800 z-10">
+              <div className="flex-1 mr-4">
+                <label className="text-xs text-neutral-400 font-medium ml-1 mb-1 block">
+                  PLAYLIST NAME
+                </label>
+                <div className="flex items-center gap-2 bg-neutral-900/50 border border-white/10 rounded-lg px-3 py-2 focus-within:border-green-500 focus-within:ring-1 focus-within:ring-green-500 transition-all">
+                  <Edit3 size={16} className="text-neutral-400" />
+                  <input
+                    type="text"
+                    value={previewModal.name}
+                    onChange={(e) => setPreviewModal((prev) => ({ ...prev, name: e.target.value }))}
+                    className="bg-transparent border-none outline-none text-white font-bold text-lg w-full placeholder-neutral-600"
+                    placeholder="My Awesome Playlist"
+                  />
+                </div>
+              </div>
+              <button
+                onClick={() => setPreviewModal((prev) => ({ ...prev, isOpen: false }))}
+                className="p-2 hover:bg-white/10 rounded-full transition-colors mt-4"
+              >
+                <X size={24} className="text-neutral-400" />
+              </button>
+            </div>
+
+            {/* Mobile Tab Switcher */}
+            <div className="flex lg:hidden border-b border-white/10 bg-neutral-800">
+              <button
+                onClick={() => setActiveTab("included")}
+                className={`flex-1 py-3 text-sm font-medium text-center transition-colors relative ${
+                  activeTab === "included" ? "text-green-500" : "text-neutral-400 hover:text-white"
+                }`}
+              >
+                Included ({previewModal.tracks.length})
+                {activeTab === "included" && (
+                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-green-500" />
+                )}
+              </button>
+              <button
+                onClick={() => setActiveTab("add")}
+                className={`flex-1 py-3 text-sm font-medium text-center transition-colors relative ${
+                  activeTab === "add" ? "text-green-500" : "text-neutral-400 hover:text-white"
+                }`}
+              >
+                Add More
+                {activeTab === "add" && (
+                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-green-500" />
+                )}
+              </button>
+            </div>
+
+            {/* Content: Two Columns */}
+            <div className="flex flex-1 min-h-0 divide-x divide-white/10">
+              {/* Left: Tracks to be created */}
+              <div
+                className={`flex-1 flex-col min-h-0 bg-neutral-900/30 ${
+                  activeTab === "included" ? "flex" : "hidden lg:flex"
+                }`}
+              >
+                <div className="p-4 bg-neutral-800/50 border-b border-white/5 flex justify-between items-center">
+                  <span className="font-semibold flex items-center gap-2">
+                    <Disc size={16} className="text-green-500" />
+                    Included Tracks
+                    <span className="bg-green-500/20 text-green-400 text-xs px-2 py-0.5 rounded-full">
+                      {previewModal.tracks.length}
+                    </span>
+                  </span>
+                </div>
+
+                <div className="flex-1 overflow-y-auto custom-scrollbar p-2 space-y-1">
+                  {previewModal.tracks.length === 0 ? (
+                    <div className="h-full flex flex-col items-center justify-center text-neutral-500 opacity-50">
+                      <Music size={48} className="mb-2" />
+                      <p>No tracks selected</p>
+                    </div>
+                  ) : (
+                    previewModal.tracks.map((track) => (
+                      <div
+                        key={`preview-${track.id}`}
+                        className="group flex items-center gap-3 p-2 rounded-lg hover:bg-white/5 transition-colors border border-transparent hover:border-white/5"
+                      >
+                        <div className="w-10 h-10 bg-neutral-700 rounded overflow-hidden shrink-0 relative">
+                          {track.image && (
+                            <img src={track.image} alt="" className="w-full h-full object-cover" />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium text-sm truncate text-white">
+                            {track.name}
+                          </div>
+                          <div className="text-xs text-neutral-400 truncate">
+                            {track.artists.join(", ")}
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => removeTrackFromPreview(track.id)}
+                          className="p-2 text-neutral-500 hover:text-red-500 hover:bg-red-500/10 rounded-full sm:opacity-0 sm:group-hover:opacity-100 transition-all opacity-100"
+                          title="Remove from playlist"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {/* Right: Add More Tracks */}
+              <div
+                className={`w-full lg:w-1/3 flex-col min-h-0 bg-white/5 ${
+                  activeTab === "add" ? "flex" : "hidden lg:flex"
+                }`}
+              >
+                <div className="p-4 border-b border-white/5 space-y-3">
+                  <div className="relative">
+                    <Search
+                      size={14}
+                      className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500"
+                    />
+                    <input
+                      type="text"
+                      placeholder="Search available tracks..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="w-full bg-neutral-900 border border-white/10 rounded-full py-1.5 pl-9 pr-4 text-sm text-white focus:outline-none focus:border-neutral-500 transition-colors"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex-1 overflow-y-auto custom-scrollbar p-2 space-y-1">
+                  {previewModal.sourceTracks
+                    .filter(
+                      (t) =>
+                        !previewModal.tracks.some((pt) => pt.id === t.id) &&
+                        (t.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          t.artists.some((a) =>
+                            a.toLowerCase().includes(searchQuery.toLowerCase())
+                          ))
+                    )
+                    .slice(0, 50) // Limit results for performance
+                    .map((track) => (
+                      <div
+                        key={`source-${track.id}`}
+                        className="flex items-center gap-3 p-2 rounded-lg hover:bg-white/5 transition-colors group cursor-pointer"
+                        onClick={() => addTrackToPreview(track)}
+                      >
+                        <div className="w-8 h-8 bg-neutral-700 rounded overflow-hidden shrink-0 opacity-75 group-hover:opacity-100">
+                          {track.image && (
+                            <img src={track.image} alt="" className="w-full h-full object-cover" />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium text-xs truncate text-neutral-300 group-hover:text-white">
+                            {track.name}
+                          </div>
+                          <div className="text-[10px] text-neutral-500 truncate">
+                            {track.artists.join(", ")}
+                          </div>
+                        </div>
+                        <button className="text-neutral-500 group-hover:text-green-400">
+                          <Plus size={14} />
+                        </button>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 border-t border-white/10 flex justify-between items-center bg-neutral-800">
+              <div className="text-sm text-neutral-400">
+                You are about to create a playlist with{" "}
+                <span className="text-white font-bold">{previewModal.tracks.length}</span> tracks.
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setPreviewModal((prev) => ({ ...prev, isOpen: false }))}
+                  className="px-6 py-2 rounded-full font-medium text-neutral-300 hover:text-white hover:bg-white/5 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={performCreateFromPreview}
+                  disabled={previewModal.tracks.length === 0 || !previewModal.name.trim()}
+                  className="px-6 py-2 rounded-full font-bold bg-green-500 text-black hover:bg-green-400 transition-colors shadow-lg hover:shadow-green-500/25 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  <Check size={18} />
+                  Create Playlist
+                </button>
+              </div>
             </div>
           </div>
         </div>
